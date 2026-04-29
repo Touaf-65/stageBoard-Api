@@ -93,6 +93,8 @@ class JournalForm(FlaskForm):
     - La date ne peut pas être dans le futur.
     - Si dates de stage définies → doit être comprise entre date_debut et date_fin.
     """
+    titre = StringField('Titre', validators=[DataRequired(), Length(min=3)])
+    description = TextAreaField('Description', validators=[Length(max=500)])
     date_entree = DateField('Date du journal', validators=[DataRequired()])
     taches = TextAreaField('Tâches', validators=[DataRequired(), Length(min=5)])
     competences = TextAreaField('Compétences', validators=[DataRequired(), Length(min=5)])

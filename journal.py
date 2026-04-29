@@ -27,6 +27,8 @@ def get_all_entries():
     entries = Journal.query.filter_by(user_id=user_id).order_by(Journal.date_entree.desc()).all()
     return jsonify([{
         "id": e.id,
+        "titre": e.titre,
+        "description": e.description,
         "date_entree": e.date_entree.isoformat(),
         "taches": e.taches,
         "competences": e.competences,
@@ -57,6 +59,8 @@ def create_entry():
 
     if form.validate():
         entry = Journal(
+            titre=form.titre.data,
+            description=form.description.data,
             date_entree=form.date_entree.data,
             taches=form.taches.data,
             competences=form.competences.data,
@@ -95,6 +99,8 @@ def update_entry(entry_id):
 
     if form.validate():
         entry.date_entree = form.date_entree.data
+        entry.titre = form.titre.data
+        entry.description = form.description.data
         entry.taches = form.taches.data
         entry.competences = form.competences.data
         entry.difficultes = form.difficultes.data

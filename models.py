@@ -86,6 +86,8 @@ class Journal(db.Model):
     """
     __tablename__ = 'journal'
     id = db.Column(db.Integer, primary_key=True)
+    titre = db.Column(db.Text)
+    description = db.Column(db.Text)
     date_entree = db.Column(db.Date, nullable=False)
     taches = db.Column(db.Text)
     competences = db.Column(db.Text)
