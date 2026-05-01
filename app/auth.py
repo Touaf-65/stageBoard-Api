@@ -7,9 +7,9 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
-from extensions import db, mail, blacklist
-from models import Users
-from forms import RegisterForm, LoginForm
+from app.extensions import db, mail, blacklist
+from app.models import Users
+from app.forms import RegisterForm, LoginForm
 
 auth_bp = Blueprint('auth', __name__)
 
