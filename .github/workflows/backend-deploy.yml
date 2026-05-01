@@ -35,18 +35,7 @@ jobs:
     - name: 'Checkout GitHub Action'
       uses: actions/checkout@v4
 
-    # If you want to use Azure RBAC instead of Publish Profile, then uncomment the task below
-    # - name: 'Login via Azure CLI'
-    #   uses: azure/login@v1
-    #   with:
-    #     creds: ${{ secrets.AZURE_RBAC_CREDENTIALS }} # set up AZURE_RBAC_CREDENTIALS secrets in your repository
 
-#    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
-#      uses: actions/setup-python@v4
-#      with:
-#        python-version: ${{ env.PYTHON_VERSION }}
-
-    # If you want to use Azure RBAC instead of Publish Profile, then uncomment the task below
     - name: 'Login to Docker Hub'
       uses: docker/login-action@v3
       with:
@@ -60,9 +49,12 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKER_HUB_USERNAME }}/stageboard-api:latest
 
-
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
     - name: 'Deploy to Azure '
-      uses: appleboy/ssh-action@1.2.0
+      uses: appleboy/ssh-action@1.0.3
       with:
         host: ${{ secrets.AZURE_HOST }}
         username: ${{ secrets.AZURE_USERNAME }}
