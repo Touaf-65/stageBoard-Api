@@ -1,5 +1,43 @@
+# ============================================================
+# [BACKEND] stageBoard-Api — .dockerignore
+# ============================================================
+# Tout ce qui est listé ici n'est PAS copié dans l'image Docker.
+# Objectif : image plus légère + pas de secrets dans l'image.
+# ============================================================
+
+# ── Secrets (ne JAMAIS intégrer dans une image) ──────────────
+.env
+.env.*
+*.env
+
+# ── Python ───────────────────────────────────────────────────
 __pycache__/
-instance
-*.md
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# ── Base de données locale ───────────────────────────────────
+instance/
+*.db
+*.sqlite3
+
+# ── Git ──────────────────────────────────────────────────────
+.git/
 .gitignore
+
+# ── CI/CD (inutile dans l'image) ─────────────────────────────
 .github/
+
+# ── Logs & docs ──────────────────────────────────────────────
+*.log
+readme.md
+*.md
+
+# ── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

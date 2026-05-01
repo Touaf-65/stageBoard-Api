@@ -1,3 +1,41 @@
-.env
+# ============================================================
+# [BACKEND] stageBoard-Api — .gitignore
+# ============================================================
+
+# ── Python ───────────────────────────────────────────────────
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Environnements virtuels ──────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── Variables d'environnement (JAMAIS commiter !) ────────────
+.env
+.env.local
+.env.production
+*.env
+
+# ── Base de données locale ───────────────────────────────────
 instance/
+*.db
+*.sqlite3
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
