@@ -62,7 +62,7 @@ jobs:
 
 
     - name: 'Deploy to Azure '
-      uses: appleboy/ssh-action@1.1.6
+      uses: appleboy/ssh-action@1.0.3
       with:
         host: ${{ secrets.AZURE_HOST }}
         username: ${{ secrets.AZURE_USERNAME }}
