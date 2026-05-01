@@ -15,8 +15,7 @@ RUN groupadd -r app_user && useradd -r -g app_user app_user
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
-COPY --chown=stageboard:stageboard app.py auth.py users.py echeances.py \
-     journal.py entreprise.py models.py extensions.py config.py forms.py ./
+COPY --chown=stageboard:stageboard app.py auth.py users.py echeances.py journal.py entreprise.py models.py extensions.py config.py forms.py ./
 ENV FLASK_ENV=production PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ENV PORT=5000 WORKERS=4
 USER stageboard
