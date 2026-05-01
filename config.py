@@ -7,7 +7,7 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "une-cle-tres-secrete")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://root:@localhost/stageboard")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://stageboard_user:2fE4dmgpmSRl2QmcwPj4oAOrhncu0c@db:3306/stageboard_db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cle-jwt-ultra-secrete")
     WTF_CSRF_ENABLED = False
