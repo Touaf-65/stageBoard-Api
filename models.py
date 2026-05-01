@@ -3,7 +3,7 @@ models.py - Définition des modèles SQLAlchemy pour StageBoard
 """
 
 from datetime import datetime
-from app.extensions import db   # importer l'instance partagée
+from extensions import db   # importer l'instance partagée
 
 # ============================
 # Table "users"

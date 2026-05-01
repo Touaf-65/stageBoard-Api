@@ -4,8 +4,8 @@ echeances.py - Gestion des échéances
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Echeances, Users
-from app.forms import DeadlineForm
+from models import db, Echeances, Users
+from forms import DeadlineForm
 
 # Création du module "échéances" avec Blueprint
 echeances_bp = Blueprint('echeances', __name__)

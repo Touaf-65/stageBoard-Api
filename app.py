@@ -5,13 +5,13 @@ app.py - Point d'entrée de l'application
 from flask import Flask
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
-from app.config import Config
-from app.extensions import db, mail,jwt
-from app.auth import auth_bp
-from app.users import users_bp
-from app.echeances import echeances_bp
-from app.journal import journal_bp
-from app.entreprise import entreprise_bp
+from config import Config
+from extensions import db, mail,jwt
+from auth import auth_bp
+from users import users_bp
+from echeances import echeances_bp
+from journal import journal_bp
+from entreprise import entreprise_bp
 
 # ============================
 # CRÉATION DE L'APPLICATION

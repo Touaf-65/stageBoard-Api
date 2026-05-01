@@ -4,9 +4,9 @@ users.py - Gestion des utilisateurs
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Users
+from models import db, Users
 from werkzeug.security import generate_password_hash
-from app.forms import RegisterForm, LoginForm, ProfileForm   
+from forms import RegisterForm, LoginForm, ProfileForm   
 
 users_bp = Blueprint('users', __name__)
 

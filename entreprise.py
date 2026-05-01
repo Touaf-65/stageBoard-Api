@@ -4,8 +4,8 @@ entreprise.py - Gestion des fiches entreprise
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Entreprise, Users
-from app.forms import EntrepriseForm
+from models import db, Entreprise, Users
+from forms import EntrepriseForm
 
 entreprise_bp = Blueprint('entreprise', __name__)
 

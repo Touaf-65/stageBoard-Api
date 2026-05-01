@@ -4,8 +4,8 @@ journal.py - Gestion du journal de bord
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Journal, Users
-from app.forms import JournalForm
+from models import db, Journal, Users
+from forms import JournalForm
 
 # Création du module "journal" avec Blueprint
 journal_bp = Blueprint('journal', __name__)
