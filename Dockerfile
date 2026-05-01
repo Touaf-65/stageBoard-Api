@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 # utilisateur sécurisé
-RUN groupadd -r app_user && useradd -r -g app_user app_user
+RUN groupadd -r azureuser && useradd -r -g azureuser azureuser
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 
 # code app
-COPY --chown=app_user:app_user app.py auth.py users.py echeances.py \
+COPY --chown=azureuser:azureuser app.py auth.py users.py echeances.py \
      journal.py entreprise.py models.py extensions.py config.py forms.py ./
 
 # variables d’environnement
@@ -37,7 +37,7 @@ ENV FLASK_ENV=production \
     PYTHONUNBUFFERED=1 \
     PORT=5000
 
-USER app_user
+USER azureuser
 
 EXPOSE 5000
 
