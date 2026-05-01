@@ -61,7 +61,9 @@ jobs:
         username: ${{ secrets.AZURE_USERNAME }}
         key: ${{ secrets.AZURE_SSH_KEY }}
         script: |
-          sudo docker pull ***/stageboard-api:latest
+          sudo docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/stageboard-api:latest
           sudo docker stop stageboard-api || true
           sudo docker rm stageboard-api || true
-          sudo docker run -d --name stageboard-api -p 80:80 ***/stageboard-api:latest
+          sudo docker run -d --name stageboard-api -p 80:80 ${{ secrets.DOCKER_HUB_USERNAME }}/stageboard-api:latest
+
+
