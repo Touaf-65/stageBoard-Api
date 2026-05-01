@@ -139,7 +139,6 @@ def update_user(user_id):
 def delete_user(user_id):
     """
     Supprime un utilisateur.
-
     - Vérifie que l'utilisateur connecté supprime son propre compte.
     - Supprime l'utilisateur de la base.
     - Retourne un message JSON de confirmation.
