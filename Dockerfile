@@ -41,7 +41,8 @@ ENV FLASK_ENV=production \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=5000
- 
+
+RUN mkdir -p /home/appuser && chown appuser:appuser /home/appuser
 USER appuser
  
 EXPOSE 5000
