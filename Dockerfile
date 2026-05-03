@@ -18,7 +18,7 @@ RUN pip install --upgrade pip \
     && pip install --no-cache-dir Flask-WTF PyMySQL cryptography gunicorn
  
 # ── Étape 2 : Image de production ────────────────────────────
-FROM python:3.11-slim AS production
+FROM python:3.12-slim AS production
  
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
@@ -29,7 +29,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 WORKDIR /app
  
 # Copier uniquement les dépendances compilées
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
  
 # Copier le code source
