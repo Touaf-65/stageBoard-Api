@@ -62,8 +62,20 @@ def forbidden(e): return {"error": "Forbidden"}, 403
 @app.errorhandler(404)
 def not_found(e): return {"error": "Not found"}, 404
 
+@app.errorhandler(413)
+def too_large(e): return {"error": "Payload too large"}, 413
+
 @app.errorhandler(429)
 def too_many(e): return {"error": "Too many requests"}, 429
+
+
+@app.after_request
+def security_headers(response):
+    """En-têtes de sécurité, y compris quand l'API est appelée sans passer par nginx."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    # Données personnelles : ne pas les garder dans les caches (navigateur, proxys)
+    response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 @app.errorhandler(500)
 def internal(e):

@@ -53,7 +53,7 @@ def create_entry():
     user_id = int(get_jwt_identity())
     user = Users.query.get(user_id)
 
-    form = JournalForm(data=request.json)
+    form = JournalForm()
     form.start_date = user.date_debut
     form.end_date = user.date_fin
 
@@ -93,7 +93,7 @@ def update_entry(entry_id):
         return jsonify({"msg": "Non autorisé"}), 403
 
     user = Users.query.get(user_id)
-    form = JournalForm(data=request.json)
+    form = JournalForm()
     form.start_date = user.date_debut
     form.end_date = user.date_fin
 

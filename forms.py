@@ -2,23 +2,53 @@
 forms.py - Définition des formulaires Flask-WTF pour StageBoard
 """
 
+from flask import request
 from flask_wtf import FlaskForm
+from flask_wtf.form import _Auto
+from werkzeug.datastructures import ImmutableMultiDict
 from wtforms import DateField, StringField, PasswordField, SubmitField, TextAreaField
 from wtforms.validators import AnyOf, DataRequired, Email, Length, Optional, ValidationError
 from datetime import date
+
+# Bornes des mots de passe : le maximum évite qu'un mot de passe géant
+# (plusieurs centaines de Ko) monopolise le CPU au hachage
+PASSWORD_MIN = 6
+PASSWORD_MAX = 128
+
+
+def normalize_email(email):
+    """Email comparé et stocké sans espaces et en minuscules (évite les doublons A@x / a@x)."""
+    return (email or '').strip().lower()
 
 
 # ============================
 # FORMULAIRE DE BASE
 # ============================
+def json_body():
+    """Corps JSON de la requête, ou {} s'il est absent ou n'est pas un objet."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 class BaseForm(FlaskForm):
     """
-    Base commune : messages de validation WTForms en français
-    (nécessite WTF_I18N_ENABLED = False dans la config, sinon Flask-WTF
-    passe par Flask-Babel qui n'est pas installé).
+    Base commune :
+    - messages de validation WTForms en français (nécessite WTF_I18N_ENABLED = False
+      dans la config, sinon Flask-WTF passe par Flask-Babel qui n'est pas installé) ;
+    - lecture robuste du JSON : un corps qui n'est pas un objet, ou des valeurs qui ne
+      sont pas du texte ({"title": 123}, listes…), donnent une erreur de validation 400
+      au lieu d'une erreur 500.
     """
     class Meta:
         locales = ['fr_FR', 'fr']
+
+        def wrap_formdata(self, form, formdata):
+            if formdata is _Auto and request.is_json:
+                return ImmutableMultiDict({
+                    key: str(value) for key, value in json_body().items()
+                    if isinstance(value, (str, int, float)) and not isinstance(value, bool)
+                })
+            return super().wrap_formdata(form, formdata)
 
 
 # ============================
@@ -30,11 +60,11 @@ class RegisterForm(BaseForm):
 
     Champs :
     - email : obligatoire, format email valide
-    - password : obligatoire, minimum 6 caractères
+    - password : obligatoire, entre PASSWORD_MIN et PASSWORD_MAX caractères
     - submit : bouton d'inscription
     """
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Mot de passe', validators=[DataRequired(), Length(min=6)])
+    email = StringField('Email', filters=[normalize_email], validators=[DataRequired(), Email(), Length(max=120)])
+    password = PasswordField('Mot de passe', validators=[DataRequired(), Length(min=PASSWORD_MIN, max=PASSWORD_MAX)])
     submit = SubmitField('S’inscrire')
 
 
@@ -50,8 +80,8 @@ class LoginForm(BaseForm):
     - password : obligatoire
     - submit : bouton de connexion
     """
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Mot de passe', validators=[DataRequired()])
+    email = StringField('Email', filters=[normalize_email], validators=[DataRequired(), Email()])
+    password = PasswordField('Mot de passe', validators=[DataRequired(), Length(max=PASSWORD_MAX)])
     submit = SubmitField('Se connecter')
 
 
@@ -146,11 +176,13 @@ class ProfileForm(BaseForm):
     Validation personnalisée :
     - date_fin doit être après date_debut.
     """
-    nom = StringField('Nom', validators=[DataRequired(), Length(min=2)])
-    prenom = StringField('Prénom', validators=[DataRequired(), Length(min=2)])
-    filiere = StringField('Filière')
-    annee = StringField('Année')
-    type_stage = StringField('Type de stage')
+    # Longueurs maximales = colonnes du modèle Users (MySQL refuserait une valeur trop longue)
+    nom = StringField('Nom', validators=[DataRequired(), Length(min=2, max=100)])
+    prenom = StringField('Prénom', validators=[DataRequired(), Length(min=2, max=100)])
+    email = StringField('Email', filters=[normalize_email], validators=[Optional(), Email(), Length(max=120)])
+    filiere = StringField('Filière', validators=[Length(max=100)])
+    annee = StringField('Année', validators=[Length(max=50)])
+    type_stage = StringField('Type de stage', validators=[Length(max=50)])
     date_debut = DateField('Date de début')
     date_fin = DateField('Date de fin')
     submit = SubmitField('Mettre à jour profil')
@@ -182,6 +214,6 @@ class EntrepriseForm(BaseForm):
     secteur = StringField('Secteur', validators=[Length(max=100)])
     adresse = StringField('Adresse', validators=[Length(max=200)])
     telephone = StringField('Téléphone', validators=[Length(max=20)])
-    email_tuteur = StringField('Email du tuteur', validators=[Optional(), Email(), Length(max=120)])
+    email_tuteur = StringField('Email du tuteur', filters=[normalize_email], validators=[Optional(), Email(), Length(max=120)])
     nom_tuteur = StringField('Nom du tuteur', validators=[Length(max=100)])
     submit = SubmitField('Enregistrer')

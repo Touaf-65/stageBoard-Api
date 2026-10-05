@@ -51,7 +51,7 @@ def create_echeance():
     user_id = int(get_jwt_identity())
     user = Users.query.get(user_id)
 
-    form = DeadlineForm(data=request.json)
+    form = DeadlineForm()
     form.start_date = user.date_debut
     form.end_date = user.date_fin
 
@@ -89,7 +89,7 @@ def update_echeance(echeance_id):
         return jsonify({"msg": "Non autorisé"}), 403
 
     user = Users.query.get(user_id)
-    form = DeadlineForm(data=request.json)
+    form = DeadlineForm()
     form.start_date = user.date_debut
     form.end_date = user.date_fin
     form.current_date = echeance.date_limite

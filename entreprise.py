@@ -57,7 +57,7 @@ def create_entreprise():
     if Entreprise.query.filter_by(user_id=current_user_id).first():
         return jsonify({"msg": "Vous avez déjà une fiche entreprise"}), 409
 
-    form = EntrepriseForm(data=request.json)
+    form = EntrepriseForm()
     if form.validate():
         entreprise = Entreprise(
             nom=form.nom.data,
@@ -93,7 +93,7 @@ def update_entreprise(id):
     if entreprise.user_id != current_user_id:
         return jsonify({"msg": "Vous ne pouvez modifier que votre propre entreprise"}), 403
 
-    form = EntrepriseForm(data=request.json)
+    form = EntrepriseForm()
     if form.validate():
         entreprise.nom = form.nom.data
         entreprise.secteur = form.secteur.data

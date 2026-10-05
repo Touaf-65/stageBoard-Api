@@ -4,9 +4,8 @@ users.py - Gestion des utilisateurs
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Users
-from werkzeug.security import generate_password_hash
-from forms import RegisterForm, LoginForm, ProfileForm   
+from models import db, Users, find_user_by_email
+from forms import ProfileForm, json_body, normalize_email
 
 users_bp = Blueprint('users', __name__)
 
@@ -16,32 +15,15 @@ def email_conflict(user, new_email):
     Retourne une réponse 409 si new_email est déjà utilisé par un autre compte,
     sinon None. Évite l'erreur 500 levée par la contrainte d'unicité en base.
     """
-    if new_email and new_email != user.email and Users.query.filter_by(email=new_email).first():
+    other = find_user_by_email(new_email) if new_email else None
+    if other and other.id != user.id:
         return jsonify({"msg": "Cet email est déjà utilisé par un autre compte"}), 409
     return None
 
-# ============================
-# GET tous les utilisateurs
-# ============================
-@users_bp.route('/', methods=['GET'])
-@jwt_required()
-def get_all_users():
-    """
-    Récupère tous les utilisateurs en base.
 
-    - Vérifie l'identité via JWT.
-    - Retourne une liste JSON avec id, nom, prénom, email, filiere, annee et type_stage.
-    """
-    users = Users.query.all()
-    return jsonify([{
-        "id": u.id,
-        "nom": u.nom,
-        "prenom": u.prenom,
-        "email": u.email,
-        "filiere": u.filiere,
-        "annee": u.annee,
-        "type_stage": u.type_stage
-    } for u in users])
+# Les routes GET /api/users/ (liste de tous les comptes) et POST /api/users/
+# (création de compte par n'importe quel utilisateur connecté) ont été supprimées :
+# elles exposaient les données des autres stagiaires. L'inscription passe par /api/auth/register.
 
 
 # ============================
@@ -53,9 +35,11 @@ def get_user(user_id):
     """
     Récupère un utilisateur par son ID.
 
-    - Vérifie l'identité via JWT.
+    - Vérifie l'identité via JWT : seul son propre compte est accessible.
     - Retourne les informations détaillées de l'utilisateur en JSON.
     """
+    if int(get_jwt_identity()) != user_id:
+        return jsonify({"msg": "Vous ne pouvez consulter que votre propre profil"}), 403
     user = Users.query.get_or_404(user_id)
     return jsonify({
         "id": user.id,
@@ -68,41 +52,6 @@ def get_user(user_id):
         "date_debut": user.date_debut.isoformat() if user.date_debut else None,
         "date_fin": user.date_fin.isoformat() if user.date_fin else None
     })
-
-
-# ============================
-# POST créer un utilisateur (admin)
-# ============================
-@users_bp.route('/', methods=['POST'])
-@jwt_required()
-def create_user():
-    """
-    Crée un nouvel utilisateur (réservé à un rôle admin).
-
-    - Valide les données avec RegisterForm.
-    - Vérifie si l'email existe déjà.
-    - Hash le mot de passe avec Werkzeug.
-    - Crée l'utilisateur avec placeholders pour nom/prénom.
-    - Retourne un message JSON avec l'id créé.
-    """
-    form = RegisterForm()
-
-    if form.validate_on_submit():
-        if Users.query.filter_by(email=form.email.data).first():
-            return jsonify({"msg": "Email déjà utilisé"}), 400
-
-        hashed_pw = generate_password_hash(form.password.data)
-        user = Users(
-            email=form.email.data,
-            mot_de_passe=hashed_pw,
-            nom="",
-            prenom=""
-        )
-        db.session.add(user)
-        db.session.commit()
-        return jsonify({"msg": "Utilisateur créé", "id": user.id}), 201
-
-    return jsonify({"errors": form.errors}), 400
 
 
 # ============================
@@ -124,16 +73,16 @@ def update_user(user_id):
     if current_user_id != user_id:
         return jsonify({"msg": "Vous ne pouvez modifier que votre propre profil"}), 403
 
-    conflict = email_conflict(user, request.json.get('email'))
+    conflict = email_conflict(user, normalize_email(json_body().get('email')))
     if conflict:
         return conflict
 
-    form = ProfileForm(data=request.json)
+    form = ProfileForm()
 
     if form.validate():
         user.nom = form.nom.data
         user.prenom = form.prenom.data
-        user.email = request.json.get('email', user.email)
+        user.email = normalize_email(form.email.data) or user.email
         user.filiere = form.filiere.data
         user.annee = form.annee.data
         user.type_stage = form.type_stage.data
@@ -212,16 +161,16 @@ def update_profile():
     user_id = int(get_jwt_identity())
     user = Users.query.get_or_404(user_id)
 
-    conflict = email_conflict(user, request.json.get('email'))
+    conflict = email_conflict(user, normalize_email(json_body().get('email')))
     if conflict:
         return conflict
 
-    form = ProfileForm(data=request.json)
+    form = ProfileForm()
 
     if form.validate():
         user.nom = form.nom.data
         user.prenom = form.prenom.data
-        user.email = request.json.get('email', user.email)
+        user.email = normalize_email(form.email.data) or user.email
         user.filiere = form.filiere.data
         user.annee = form.annee.data
         user.type_stage = form.type_stage.data

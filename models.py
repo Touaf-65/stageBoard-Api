@@ -2,7 +2,9 @@
 models.py - Définition des modèles SQLAlchemy pour StageBoard
 """
 
+import hashlib
 from datetime import datetime
+from sqlalchemy import func
 from extensions import db   # importer l'instance partagée
 
 # ============================
@@ -41,8 +43,25 @@ class Users(db.Model):
     date_debut = db.Column(db.Date)
     date_fin = db.Column(db.Date)
 
-    echeances = db.relationship('Echeances', backref='user', lazy=True)
-    journal_entries = db.relationship('Journal', backref='user', lazy=True)
+    # cascade : supprimer un compte supprime ses données (sinon user_id passe à NULL → erreur 500)
+    echeances = db.relationship('Echeances', backref='user', lazy=True, cascade='all, delete-orphan')
+    journal_entries = db.relationship('Journal', backref='user', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def password_fingerprint(self):
+        """
+        Empreinte courte du hash du mot de passe, embarquée dans les JWT (claim "pwd").
+        Elle change avec le mot de passe : les sessions ouvertes avant un changement
+        deviennent invalides (voir extensions.check_if_token_revoked).
+        """
+        return hashlib.sha256(self.mot_de_passe.encode()).hexdigest()[:16]
+
+
+def find_user_by_email(email):
+    """Recherche insensible à la casse (les comptes existants peuvent contenir des majuscules)."""
+    if not email:
+        return None
+    return Users.query.filter(func.lower(Users.email) == email.strip().lower()).first()
 
 
 # ============================
@@ -125,4 +144,4 @@ class Entreprise(db.Model):
     nom_tuteur = db.Column(db.String(100))
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    user = db.relationship("Users", backref="entreprise", uselist=False)
+    user = db.relationship("Users", backref=db.backref("entreprise", cascade="all, delete-orphan"), uselist=False)

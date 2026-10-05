@@ -1,15 +1,35 @@
 import os
+import warnings
 from datetime import timedelta
 from dotenv import load_dotenv
 
 # Charger les variables du fichier .env
 load_dotenv()
 
+# FLASK_ENV=production est défini dans le Dockerfile
+IS_PRODUCTION = os.getenv("FLASK_ENV") == "production"
+
+
+def setting(name, dev_default):
+    """
+    Valeur d'une variable d'environnement. En production elle est obligatoire :
+    aucune valeur par défaut écrite dans le code (et donc publique sur GitHub)
+    ne peut servir de secret ou d'accès à la base.
+    """
+    value = os.getenv(name)
+    if value:
+        return value
+    if IS_PRODUCTION:
+        raise RuntimeError(f"Variable d'environnement {name} manquante : obligatoire en production.")
+    return dev_default
+
+
 class Config:
-    SECRET_KEY = os.getenv("SECRET_KEY")
+    SECRET_KEY = setting("SECRET_KEY", "dev-uniquement-secret-key")
     DEBUG = False
     TESTING = False
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://stageboard_user:2fE4dmgpmSRl2QmcwPj4oAOrhncu0c@db:3306/stageboard_db")
+    MAX_CONTENT_LENGTH = 1 * 1024 * 1024  # 1 Mo : au-delà, réponse 413 sans lire le corps
+    SQLALCHEMY_DATABASE_URI = setting("DATABASE_URL", "sqlite:///app.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,             # Détection connexions mortes
@@ -19,7 +39,10 @@ class Config:
         # TLS MySQL (option non supportée par SQLite, utilisé en local)
         SQLALCHEMY_ENGINE_OPTIONS["connect_args"] = {"ssl": {"ssl_mode": "REQUIRED"}}
 
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cle-jwt-ultra-secrete")
+    # Avec une clé connue, n'importe qui peut fabriquer un token valide pour n'importe quel compte
+    JWT_SECRET_KEY = setting("JWT_SECRET_KEY", "dev-uniquement-jwt-ne-jamais-utiliser-en-production")
+    if len(JWT_SECRET_KEY) < 32:
+        warnings.warn("JWT_SECRET_KEY fait moins de 32 caractères : utilisez une clé aléatoire plus longue.")
     WTF_CSRF_ENABLED = False
     WTF_I18N_ENABLED = False  # traductions WTForms intégrées (voir BaseForm.Meta.locales)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)

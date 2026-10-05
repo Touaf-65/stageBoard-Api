@@ -6,12 +6,20 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
+from flask import current_app
 from extensions import db, mail, blacklist
-from models import Users
-from forms import RegisterForm, LoginForm
+from models import Users, find_user_by_email
+from forms import RegisterForm, LoginForm, json_body, normalize_email, PASSWORD_MIN, PASSWORD_MAX
 from config import Frontend_Config
 
 auth_bp = Blueprint('auth', __name__)
+
+# Hash factice : la connexion avec un email inconnu prend le même temps qu'avec un
+# email existant (sinon le temps de réponse révèle quels comptes existent)
+_DUMMY_HASH = generate_password_hash("mot-de-passe-factice")
+
+RESET_REQUEST_MSG = "Si un compte est associé à cet email, un lien de réinitialisation vient d'être envoyé."
+
 
 # ============================
 # ROUTE INSCRIPTION
@@ -29,12 +37,15 @@ def register():
     form = RegisterForm()
 
     if form.validate_on_submit():
-        if Users.query.filter_by(email=form.email.data).first():
+        email = normalize_email(form.email.data)
+        # Message explicite gardé pour l'ergonomie ; l'énumération est freinée
+        # par la limite de débit de nginx sur /api/auth/register (3/min par IP)
+        if find_user_by_email(email):
             return jsonify({"msg": "Cet email est déjà utilisé"}), 400
 
         hashed_pw = generate_password_hash(form.password.data)
         user = Users(
-            email=form.email.data,
+            email=email,
             mot_de_passe=hashed_pw,
             nom="",
             prenom=""
@@ -62,14 +73,16 @@ def login():
     form = LoginForm()
 
     if form.validate_on_submit():
-        user = Users.query.filter_by(email=form.email.data).first()
+        user = find_user_by_email(form.email.data)
 
-        if not user or not check_password_hash(user.mot_de_passe, form.password.data):
+        password_ok = check_password_hash(user.mot_de_passe if user else _DUMMY_HASH, form.password.data)
+        if not user or not password_ok:
             return jsonify({"msg": "Email ou mot de passe incorrect"}), 401
 
+        # "pwd" : empreinte du mot de passe, la session est révoquée s'il change
         access_token = create_access_token(
             identity=str(user.id),
-            additional_claims={"email": user.email}
+            additional_claims={"email": user.email, "pwd": user.password_fingerprint}
         )
 
         return jsonify({
@@ -90,29 +103,26 @@ def reset_password_request():
     Envoie un email de réinitialisation de mot de passe.
 
     - Reçoit un email en JSON.
-    - Vérifie si l'utilisateur existe (mais ne révèle pas l'info pour la sécurité).
+    - Répond toujours le même message, que le compte existe ou non (pas d'énumération).
     - Génère un token JWT valable 10 minutes (identity = user.id en string).
     - Envoie un lien de réinitialisation par email.
-    - Retourne un message JSON de confirmation.
     """
-    data = request.get_json()
-    email = data.get("email")
-
-    user = Users.query.filter_by(email=email).first()
+    user = find_user_by_email(json_body().get("email"))
     if not user:
-        return jsonify({"msg": "Si cet email existe, vous recevrez un lien"}), 200
+        return jsonify({"msg": RESET_REQUEST_MSG}), 200
 
     # purpose "reset" : refusé comme token d'accès (voir extensions.check_if_token_revoked)
+    # pwd : le lien devient invalide dès que le mot de passe a changé (usage unique)
     reset_token = create_access_token(
         identity=str(user.id),
         expires_delta=timedelta(minutes=10),
-        additional_claims={"purpose": "reset"}
+        additional_claims={"purpose": "reset", "pwd": user.password_fingerprint}
     )
     reset_link = f"{Frontend_Config.URL}/auth/new-password?token={reset_token}"
 
     msg = Message(
         subject="Réinitialisation de mot de passe - StageBoard",
-        recipients=[email]
+        recipients=[user.email]
     )
     msg.body = f"""
 Bonjour,
@@ -122,9 +132,13 @@ Cliquez sur ce lien pour continuer : {reset_link}
 
 Ce lien expire dans 10 minutes.
 """
-    mail.send(msg)
+    try:
+        mail.send(msg)
+    except Exception:
+        # Erreur SMTP journalisée côté serveur, même réponse au client
+        current_app.logger.exception("Envoi de l'email de réinitialisation impossible")
 
-    return jsonify({"msg": "Lien de réinitialisation envoyé par email"}), 200
+    return jsonify({"msg": RESET_REQUEST_MSG}), 200
 
 
 # ============================
@@ -143,20 +157,19 @@ def reset_password():
     - Invalide le token (usage unique).
     - Retourne un message JSON de succès ou d'erreur.
     """
-    data = request.get_json() or {}
+    data = json_body()
     token = data.get("token")
     new_password = data.get("new_password")
     confirm_password = data.get("confirm_password")
 
-    if not token or not new_password:
+    if not isinstance(token, str) or not isinstance(new_password, str) or not token or not new_password:
         return jsonify({"msg": "Token et nouveau mot de passe requis"}), 400
-    if len(new_password) < 6:
-        return jsonify({"msg": "Le mot de passe doit contenir au moins 6 caractères."}), 400
+    if not PASSWORD_MIN <= len(new_password) <= PASSWORD_MAX:
+        return jsonify({"msg": f"Le mot de passe doit contenir entre {PASSWORD_MIN} et {PASSWORD_MAX} caractères."}), 400
     if confirm_password is not None and confirm_password != new_password:
         return jsonify({"msg": "Les mots de passe ne correspondent pas."}), 400
 
     import jwt
-    from flask import current_app
 
     try:
         secret = current_app.config['JWT_SECRET_KEY']
@@ -167,17 +180,16 @@ def reset_password():
         user_id = int(user_id)  # conversion en entier
     except jwt.ExpiredSignatureError:
         return jsonify({"msg": "Le lien a expiré. Refaites une demande."}), 400
-    except jwt.InvalidTokenError as e:
-        return jsonify({"msg": f"Lien invalide : {str(e)}"}), 400
+    except (jwt.InvalidTokenError, ValueError):
+        return jsonify({"msg": "Lien invalide. Refaites une demande."}), 400
 
     # Un token de session ne doit pas permettre de changer le mot de passe,
-    # et un lien de réinitialisation ne sert qu'une fois
-    if payload.get("purpose") != "reset" or payload.get('jti') in blacklist:
+    # et un lien de réinitialisation ne sert qu'une fois : son empreinte "pwd"
+    # ne correspond plus dès que le mot de passe a été changé
+    user = db.session.get(Users, user_id)
+    if (payload.get("purpose") != "reset" or payload.get('jti') in blacklist
+            or not user or payload.get("pwd") != user.password_fingerprint):
         return jsonify({"msg": "Lien invalide ou déjà utilisé. Refaites une demande."}), 400
-
-    user = Users.query.get(user_id)
-    if not user:
-        return jsonify({"msg": "Utilisateur introuvable"}), 404
 
     user.mot_de_passe = generate_password_hash(new_password)
     db.session.commit()
