@@ -21,6 +21,7 @@ class Config:
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cle-jwt-ultra-secrete")
     WTF_CSRF_ENABLED = False
+    WTF_I18N_ENABLED = False  # traductions WTForms intégrées (voir BaseForm.Meta.locales)
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
 
     # ============================

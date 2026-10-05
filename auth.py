@@ -36,8 +36,8 @@ def register():
         user = Users(
             email=form.email.data,
             mot_de_passe=hashed_pw,
-            nom="Nom",
-            prenom="Prénom"
+            nom="",
+            prenom=""
         )
         db.session.add(user)
         db.session.commit()

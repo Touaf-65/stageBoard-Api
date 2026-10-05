@@ -92,6 +92,7 @@ def update_echeance(echeance_id):
     form = DeadlineForm(data=request.json)
     form.start_date = user.date_debut
     form.end_date = user.date_fin
+    form.current_date = echeance.date_limite
 
     if form.validate():
         echeance.titre = form.title.data

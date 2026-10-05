@@ -4,13 +4,27 @@ forms.py - Définition des formulaires Flask-WTF pour StageBoard
 
 from flask_wtf import FlaskForm
 from wtforms import DateField, StringField, PasswordField, SubmitField, TextAreaField
-from wtforms.validators import DataRequired, Email, Length, Optional, ValidationError
+from wtforms.validators import AnyOf, DataRequired, Email, Length, Optional, ValidationError
 from datetime import date
+
+
+# ============================
+# FORMULAIRE DE BASE
+# ============================
+class BaseForm(FlaskForm):
+    """
+    Base commune : messages de validation WTForms en français
+    (nécessite WTF_I18N_ENABLED = False dans la config, sinon Flask-WTF
+    passe par Flask-Babel qui n'est pas installé).
+    """
+    class Meta:
+        locales = ['fr_FR', 'fr']
+
 
 # ============================
 # FORMULAIRE D'INSCRIPTION
 # ============================
-class RegisterForm(FlaskForm):
+class RegisterForm(BaseForm):
     """
     Formulaire d'inscription utilisateur.
 
@@ -27,7 +41,7 @@ class RegisterForm(FlaskForm):
 # ============================
 # FORMULAIRE DE CONNEXION
 # ============================
-class LoginForm(FlaskForm):
+class LoginForm(BaseForm):
     """
     Formulaire de connexion utilisateur.
 
@@ -44,30 +58,34 @@ class LoginForm(FlaskForm):
 # ============================
 # FORMULAIRE D'AJOUT D'ECHEANCE
 # ============================
-class DeadlineForm(FlaskForm):
+class DeadlineForm(BaseForm):
     """
     Formulaire pour créer ou modifier une échéance.
 
     Champs :
     - title : obligatoire, minimum 3 caractères
     - description : optionnel
-    - statut : obligatoire (ex: 'a_venir', 'termine', 'retard')
-    - due_date : obligatoire, format date
+    - statut : obligatoire, parmi STATUTS
+    - due_date : obligatoire, format date (AAAA-MM-JJ)
     - submit : bouton d'ajout
 
     Validation personnalisée :
-    - La date ne peut pas être dans le passé.
+    - La date ne peut pas être dans le passé, sauf si elle est inchangée lors d'une
+      modification (current_date) : une échéance dépassée peut ainsi passer en "Fait".
     - Si dates de stage définies → doit être comprise entre date_debut et date_fin.
     """
-    title = StringField('Titre', validators=[DataRequired(), Length(min=3)])
+    STATUTS = ['A venir', 'Fait', 'En retard']
+
+    title = StringField('Titre', validators=[DataRequired(), Length(min=3, max=200)])
     description = TextAreaField('Description')
-    statut = StringField('Statut', validators=[DataRequired()])
+    statut = StringField('Statut', validators=[DataRequired(), AnyOf(STATUTS, message="Statut invalide (A venir, Fait ou En retard).")])
     due_date = DateField('Date limite', validators=[DataRequired()])
     submit = SubmitField('Ajouter échéance')
 
     def validate_due_date(self, field):
         """Vérifie que la date limite est valide (pas passée et dans les bornes du stage)."""
-        if field.data < date.today():
+        unchanged = field.data == getattr(self, "current_date", None)
+        if field.data < date.today() and not unchanged:
             raise ValidationError("La date limite ne peut pas être dans le passé.")
         if hasattr(self, "start_date") and hasattr(self, "end_date"):
             if self.start_date and self.end_date:
@@ -78,7 +96,7 @@ class DeadlineForm(FlaskForm):
 # ============================
 # FORMULAIRE D'AJOUT DE JOURNAL
 # ============================
-class JournalForm(FlaskForm):
+class JournalForm(BaseForm):
     """
     Formulaire pour ajouter une entrée de journal.
 
@@ -114,7 +132,7 @@ class JournalForm(FlaskForm):
 # ============================
 # FORMULAIRE DE MISE À JOUR DU PROFIL
 # ============================
-class ProfileForm(FlaskForm):
+class ProfileForm(BaseForm):
     """
     Formulaire pour mettre à jour le profil utilisateur.
 
@@ -147,7 +165,7 @@ class ProfileForm(FlaskForm):
 # ============================
 # FORMULAIRE ENTREPRISE
 # ============================
-class EntrepriseForm(FlaskForm):
+class EntrepriseForm(BaseForm):
     """
     Formulaire pour créer ou modifier une fiche entreprise.
 

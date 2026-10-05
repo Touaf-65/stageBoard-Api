@@ -10,6 +10,16 @@ from forms import RegisterForm, LoginForm, ProfileForm
 
 users_bp = Blueprint('users', __name__)
 
+
+def email_conflict(user, new_email):
+    """
+    Retourne une réponse 409 si new_email est déjà utilisé par un autre compte,
+    sinon None. Évite l'erreur 500 levée par la contrainte d'unicité en base.
+    """
+    if new_email and new_email != user.email and Users.query.filter_by(email=new_email).first():
+        return jsonify({"msg": "Cet email est déjà utilisé par un autre compte"}), 409
+    return None
+
 # ============================
 # GET tous les utilisateurs
 # ============================
@@ -85,8 +95,8 @@ def create_user():
         user = Users(
             email=form.email.data,
             mot_de_passe=hashed_pw,
-            nom="Nom",
-            prenom="Prénom"
+            nom="",
+            prenom=""
         )
         db.session.add(user)
         db.session.commit()
@@ -113,6 +123,10 @@ def update_user(user_id):
     current_user_id = int(get_jwt_identity())
     if current_user_id != user_id:
         return jsonify({"msg": "Vous ne pouvez modifier que votre propre profil"}), 403
+
+    conflict = email_conflict(user, request.json.get('email'))
+    if conflict:
+        return conflict
 
     form = ProfileForm(data=request.json)
 
@@ -197,7 +211,11 @@ def update_profile():
     """
     user_id = int(get_jwt_identity())
     user = Users.query.get_or_404(user_id)
-    
+
+    conflict = email_conflict(user, request.json.get('email'))
+    if conflict:
+        return conflict
+
     form = ProfileForm(data=request.json)
 
     if form.validate():
