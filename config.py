@@ -14,8 +14,10 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,             # Détection connexions mortes
         "pool_recycle": 3600,              # Recyclage connexions
-        "connect_args": {"ssl": {"ssl_mode": "REQUIRED"}}  # TLS MySQL
     }
+    if SQLALCHEMY_DATABASE_URI.startswith("mysql"):
+        # TLS MySQL (option non supportée par SQLite, utilisé en local)
+        SQLALCHEMY_ENGINE_OPTIONS["connect_args"] = {"ssl": {"ssl_mode": "REQUIRED"}}
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cle-jwt-ultra-secrete")
     WTF_CSRF_ENABLED = False
@@ -35,8 +37,14 @@ class Config:
     SESSION_COOKIE_SECURE = True    # cookie HTTPS uniquement
     SESSION_COOKIE_HTTPONLY = True    # pas accessible en JS
     SESSION_COOKIE_SAMESITE = 'Lax'
-    
+
     # ── JWT durci ─────────────────────────────────────────────
     JWT_COOKIE_SECURE = True
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
+
+
+class Frontend_Config:
+    # URL du front utilisée dans les liens envoyés par email
+    # (dev : http://localhost:4200, prod : https://stagebroad.com)
+    URL = os.getenv("FRONTEND_URL", "http://localhost:4200").rstrip("/")

@@ -1,7 +1,6 @@
 """
 auth.py - Gestion de l'authentification
 """
-
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from datetime import timedelta
@@ -10,6 +9,7 @@ from flask_mail import Message
 from extensions import db, mail, blacklist
 from models import Users
 from forms import RegisterForm, LoginForm
+from config import Frontend_Config
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -103,7 +103,7 @@ def reset_password_request():
         return jsonify({"msg": "Si cet email existe, vous recevrez un lien"}), 200
 
     reset_token = create_access_token(identity=str(user.id), expires_delta=timedelta(minutes=10))
-    reset_link = f"https://stageboard/authentification/motdepasseoublié?token={reset_token}"
+    reset_link = f"{Frontend_Config.URL}/auth/new-password?token={reset_token}"
 
     msg = Message(
         subject="Réinitialisation de mot de passe - StageBoard",
