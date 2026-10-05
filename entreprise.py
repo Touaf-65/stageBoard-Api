@@ -51,10 +51,14 @@ def create_entreprise():
     - Associe l'entreprise au user_id du JWT.
     - Insère l'entreprise en base.
     - Retourne un message JSON avec l'id créé.
+    - Retourne 409 si l'utilisateur a déjà une fiche entreprise (relation 1-1).
     """
+    current_user_id = int(get_jwt_identity())
+    if Entreprise.query.filter_by(user_id=current_user_id).first():
+        return jsonify({"msg": "Vous avez déjà une fiche entreprise"}), 409
+
     form = EntrepriseForm(data=request.json)
     if form.validate():
-        current_user_id = int(get_jwt_identity())
         entreprise = Entreprise(
             nom=form.nom.data,
             secteur=form.secteur.data,

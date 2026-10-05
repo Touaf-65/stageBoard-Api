@@ -4,7 +4,7 @@ forms.py - Définition des formulaires Flask-WTF pour StageBoard
 
 from flask_wtf import FlaskForm
 from wtforms import DateField, StringField, PasswordField, SubmitField, TextAreaField
-from wtforms.validators import DataRequired, Email, Length, ValidationError
+from wtforms.validators import DataRequired, Email, Length, Optional, ValidationError
 from datetime import date
 
 # ============================
@@ -154,14 +154,16 @@ class EntrepriseForm(FlaskForm):
     Champs :
     - nom : obligatoire, minimum 2 caractères
     - secteur, adresse, telephone : optionnels
-    - email_tuteur : format email valide
+    - email_tuteur : optionnel, format email valide si renseigné
     - nom_tuteur : optionnel
     - submit : bouton d'enregistrement
+
+    Les longueurs maximales correspondent aux colonnes du modèle Entreprise.
     """
-    nom = StringField('Nom de l’entreprise', validators=[DataRequired(), Length(min=2)])
-    secteur = StringField('Secteur')
-    adresse = StringField('Adresse')
-    telephone = StringField('Téléphone')
-    email_tuteur = StringField('Email du tuteur', validators=[Email()])
-    nom_tuteur = StringField('Nom du tuteur')
+    nom = StringField('Nom de l’entreprise', validators=[DataRequired(), Length(min=2, max=100)])
+    secteur = StringField('Secteur', validators=[Length(max=100)])
+    adresse = StringField('Adresse', validators=[Length(max=200)])
+    telephone = StringField('Téléphone', validators=[Length(max=20)])
+    email_tuteur = StringField('Email du tuteur', validators=[Optional(), Email(), Length(max=120)])
+    nom_tuteur = StringField('Nom du tuteur', validators=[Length(max=100)])
     submit = SubmitField('Enregistrer')
