@@ -102,7 +102,12 @@ def reset_password_request():
     if not user:
         return jsonify({"msg": "Si cet email existe, vous recevrez un lien"}), 200
 
-    reset_token = create_access_token(identity=str(user.id), expires_delta=timedelta(minutes=10))
+    # purpose "reset" : refusé comme token d'accès (voir extensions.check_if_token_revoked)
+    reset_token = create_access_token(
+        identity=str(user.id),
+        expires_delta=timedelta(minutes=10),
+        additional_claims={"purpose": "reset"}
+    )
     reset_link = f"{Frontend_Config.URL}/auth/new-password?token={reset_token}"
 
     msg = Message(
@@ -132,18 +137,23 @@ def reset_password():
 
     - Reçoit le token et le nouveau mot de passe en JSON.
     - Décode le token JWT manuellement avec la clé secrète.
-    - Vérifie que le token est valide et non expiré.
-    - Convertit l'ID utilisateur en entier.
-    - Hash le nouveau mot de passe avec Werkzeug.
-    - Met à jour l'utilisateur en base.
+    - Vérifie que le token est valide, non expiré, destiné à la réinitialisation (purpose "reset") et pas déjà utilisé.
+    - Vérifie le nouveau mot de passe (6 caractères min., identique à la confirmation).
+    - Hash le nouveau mot de passe avec Werkzeug et met à jour l'utilisateur.
+    - Invalide le token (usage unique).
     - Retourne un message JSON de succès ou d'erreur.
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     token = data.get("token")
     new_password = data.get("new_password")
+    confirm_password = data.get("confirm_password")
 
     if not token or not new_password:
         return jsonify({"msg": "Token et nouveau mot de passe requis"}), 400
+    if len(new_password) < 6:
+        return jsonify({"msg": "Le mot de passe doit contenir au moins 6 caractères."}), 400
+    if confirm_password is not None and confirm_password != new_password:
+        return jsonify({"msg": "Les mots de passe ne correspondent pas."}), 400
 
     import jwt
     from flask import current_app
@@ -160,42 +170,21 @@ def reset_password():
     except jwt.InvalidTokenError as e:
         return jsonify({"msg": f"Lien invalide : {str(e)}"}), 400
 
+    # Un token de session ne doit pas permettre de changer le mot de passe,
+    # et un lien de réinitialisation ne sert qu'une fois
+    if payload.get("purpose") != "reset" or payload.get('jti') in blacklist:
+        return jsonify({"msg": "Lien invalide ou déjà utilisé. Refaites une demande."}), 400
+
     user = Users.query.get(user_id)
     if not user:
         return jsonify({"msg": "Utilisateur introuvable"}), 404
 
     user.mot_de_passe = generate_password_hash(new_password)
     db.session.commit()
+    blacklist.add(payload['jti'])
 
     return jsonify({"msg": "Mot de passe réinitialisé avec succès"}), 200
 
-
-#=============================
-#
-#=============================
-@auth_bp.route('/getConnectedUserByEmail/<email>/', methods=['GET'])
-def get_connected_user_by_email(email):
-    """
-    Récupère les informations de l'utilisateur connecté à partir de son email.
-
-    - Reçoit l'email en paramètre de requête.
-    - Recherche l'utilisateur en base de données.
-    - Retourne les informations de l'utilisateur en JSON ou un message d'erreur.
-    """
-    if not email:
-        return jsonify({"msg": "Email requis"}), 400
-    try:
-        user = Users.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({"msg": "Utilisateur introuvable"}), 404
-
-        return jsonify({
-            "id": user.id,
-            "email": user.email,
-        }), 200
-    except Exception as e:
-        return jsonify({"msg": f"Erreur lors de la récupération de l'utilisateur : {str(e)}"}), 500
-    
 
 # ============================
 # ROUTE DECONNEXION
