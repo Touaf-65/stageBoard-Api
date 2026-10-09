@@ -7,8 +7,8 @@ from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
 from flask import current_app
-from extensions import db, mail, blacklist
-from models import Users, find_user_by_email
+from extensions import db, mail
+from models import Users, find_user_by_email, is_token_revoked, revoke_token
 from forms import RegisterForm, LoginForm, json_body, normalize_email, PASSWORD_MIN, PASSWORD_MAX
 from config import Frontend_Config
 
@@ -187,13 +187,14 @@ def reset_password():
     # et un lien de réinitialisation ne sert qu'une fois : son empreinte "pwd"
     # ne correspond plus dès que le mot de passe a été changé
     user = db.session.get(Users, user_id)
-    if (payload.get("purpose") != "reset" or payload.get('jti') in blacklist
+    if (payload.get("purpose") != "reset" or is_token_revoked(payload.get('jti'))
             or not user or payload.get("pwd") != user.password_fingerprint):
         return jsonify({"msg": "Lien invalide ou déjà utilisé. Refaites une demande."}), 400
 
+    # Nouveau mot de passe et révocation du lien dans la même transaction
     user.mot_de_passe = generate_password_hash(new_password)
+    revoke_token(payload, commit=False)
     db.session.commit()
-    blacklist.add(payload['jti'])
 
     return jsonify({"msg": "Mot de passe réinitialisé avec succès"}), 200
 
@@ -207,10 +208,9 @@ def logout():
     """
     Déconnecte l'utilisateur en invalidant son token JWT.
 
-    - Récupère l'identifiant unique du token (jti).
-    - Ajoute ce jti à une blacklist.
+    - Enregistre le token (jti, expiration) dans la table revoked_tokens :
+      il est refusé par tous les workers, y compris après un redémarrage.
     - Retourne un message JSON de confirmation.
     """
-    jti = get_jwt()["jti"]  
-    blacklist.add(jti)
+    revoke_token(get_jwt())
     return jsonify({"msg": "Déconnecté avec succès"}), 200

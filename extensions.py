@@ -6,13 +6,11 @@ db = SQLAlchemy()
 mail = Mail()
 jwt = JWTManager()
 
-# Blacklist pour les tokens invalidés
-blacklist = set()
-
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
     """
-    Vérifie si le token JWT est dans la blacklist.
+    Vérifie si le token JWT a été révoqué (table revoked_tokens, partagée par tous
+    les workers et persistante, voir models.RevokedToken).
     Retourne True si le token est invalide (déconnecté).
 
     Sont aussi refusés :
@@ -23,10 +21,12 @@ def check_if_token_revoked(jwt_header, jwt_payload):
       différent de l'empreinte actuelle) : changer son mot de passe ferme les
       autres sessions. Un token sans claim "pwd" (émis avant ce contrôle) est refusé.
     """
-    if jwt_payload["jti"] in blacklist or jwt_payload.get("purpose") == "reset":
+    if jwt_payload.get("purpose") == "reset":
         return True
 
-    from models import Users  # import local : models importe extensions
+    from models import Users, is_token_revoked  # import local : models importe extensions
+    if is_token_revoked(jwt_payload["jti"]):
+        return True
     try:
         user = db.session.get(Users, int(jwt_payload["sub"]))
     except (KeyError, TypeError, ValueError):

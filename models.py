@@ -3,8 +3,9 @@ models.py - Définition des modèles SQLAlchemy pour StageBoard
 """
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from extensions import db   # importer l'instance partagée
 
 # ============================
@@ -145,3 +146,49 @@ class Entreprise(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     user = db.relationship("Users", backref=db.backref("entreprise", cascade="all, delete-orphan"), uselist=False)
+
+
+# ============================
+# Table "revoked_tokens"
+# ============================
+class RevokedToken(db.Model):
+    """
+    Tokens JWT invalidés avant leur expiration (déconnexion, lien de réinitialisation utilisé).
+
+    Stockés en base et non plus en mémoire : la révocation vaut pour tous les workers
+    gunicorn et survit aux redémarrages. Une ligne n'est utile que jusqu'à l'expiration
+    du token (après, il est refusé de toute façon) : les lignes expirées sont purgées.
+
+    Champs :
+    - jti : identifiant unique du token (claim "jti")
+    - expires_at : expiration du token (UTC, sans fuseau)
+    """
+    __tablename__ = 'revoked_tokens'
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def is_token_revoked(jti):
+    return db.session.query(RevokedToken.id).filter_by(jti=jti).first() is not None
+
+
+def revoke_token(jwt_payload, commit=True):
+    """
+    Révoque un token à partir de ses claims (jti, exp) et purge les révocations expirées.
+    commit=False : ajouté à la transaction en cours (ex. avec le changement de mot de passe).
+    """
+    RevokedToken.query.filter(RevokedToken.expires_at < _utcnow()).delete(synchronize_session=False)
+    if not is_token_revoked(jwt_payload["jti"]):
+        expires_at = datetime.fromtimestamp(jwt_payload["exp"], tz=timezone.utc).replace(tzinfo=None)
+        db.session.add(RevokedToken(jti=jwt_payload["jti"], expires_at=expires_at))
+    if commit:
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Même token révoqué en parallèle par une autre requête : le résultat est le même
+            db.session.rollback()

@@ -133,6 +133,31 @@ check("Token d'un compte supprimé -> erreur 500", r.status_code >= 500, str(r.s
 r = c.get('/api/users/profile', headers=fantome)
 check("Token d'un compte supprimé encore accepté (404 au lieu de 401)", r.status_code != 401, str(r.status_code))
 
+# Déconnexion vue depuis un AUTRE processus sur la même base : simule un autre worker
+# gunicorn ou un redémarrage (une liste noire en mémoire ne serait pas partagée)
+deconnecte, _ = register_login('deconnecte@test.io')
+c.post('/api/auth/logout', headers=deconnecte)
+autre_worker = (
+    "import sys; sys.path.insert(0, sys.argv[1]); import app; "
+    "print(app.app.test_client().get('/api/users/profile', headers={'Authorization': sys.argv[2]}).status_code)"
+)
+p = subprocess.run([sys.executable, '-c', autre_worker,
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), deconnecte['Authorization']],
+                   capture_output=True, text=True)
+statut_autre_worker = (p.stdout.strip().splitlines() or ['?'])[-1]
+check("Token déconnecté encore accepté par un autre worker / après redémarrage",
+      statut_autre_worker != '401', f"autre processus -> {statut_autre_worker}")
+
+with app.app_context():
+    from models import RevokedToken
+    db.session.add(RevokedToken(jti='ancien-token-expire', expires_at=datetime.datetime(2000, 1, 1)))
+    db.session.commit()
+autre, _ = register_login('purge@test.io')
+c.post('/api/auth/logout', headers=autre)
+with app.app_context():
+    restants = RevokedToken.query.filter(RevokedToken.expires_at < datetime.datetime(2001, 1, 1)).count()
+check("Révocations expirées jamais purgées (la table grossit sans fin)", restants > 0, f"{restants} ligne(s) expirée(s)")
+
 r = c.post('/api/echeances/', headers=attaquant, json={'title': 123, 'due_date': ['x'], 'statut': None})
 check("Valeurs JSON non textuelles -> erreur 500", r.status_code >= 500, str(r.status_code))
 r = c.post('/api/journal/', headers=attaquant, json=['liste'])
