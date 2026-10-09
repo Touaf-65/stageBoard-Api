@@ -2,7 +2,11 @@
 auth.py - Gestion de l'authentification
 """
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import (
+    create_access_token, decode_token, get_jwt, set_access_cookies, unset_jwt_cookies, verify_jwt_in_request,
+)
+from flask_jwt_extended.exceptions import JWTExtendedException
+from jwt.exceptions import PyJWTError
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
@@ -67,8 +71,10 @@ def login():
     Connecte un utilisateur existant.
 
     - Vérifie l'email et le mot de passe.
-    - Génère un token JWT si les informations sont correctes.
-    - Retourne le token, l'email et l'ID utilisateur.
+    - Génère un token JWT si les informations sont correctes et le pose dans un cookie
+      HttpOnly (illisible par JavaScript), avec le cookie CSRF associé.
+    - Retourne l'email, l'ID utilisateur et l'expiration de la session (timestamp en
+      secondes), mais pas le token.
     """
     form = LoginForm()
 
@@ -85,11 +91,15 @@ def login():
             additional_claims={"email": user.email, "pwd": user.password_fingerprint}
         )
 
-        return jsonify({
-            "token": access_token,
+        response = jsonify({
             "email": user.email,
-            "userId": user.id
-        }), 200
+            "userId": user.id,
+            "expiresAt": decode_token(access_token)["exp"]
+        })
+        # Cookies de même durée que le token (sinon 1 an par défaut avec JWT_SESSION_COOKIE = False)
+        max_age = int(current_app.config["JWT_ACCESS_TOKEN_EXPIRES"].total_seconds())
+        set_access_cookies(response, access_token, max_age=max_age)
+        return response, 200
 
     return jsonify({"errors": form.errors}), 400
 
@@ -203,14 +213,22 @@ def reset_password():
 # ROUTE DECONNEXION
 # ============================
 @auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
 def logout():
     """
     Déconnecte l'utilisateur en invalidant son token JWT.
 
-    - Enregistre le token (jti, expiration) dans la table revoked_tokens :
-      il est refusé par tous les workers, y compris après un redémarrage.
+    - Si le token est valide, l'enregistre (jti, expiration) dans la table
+      revoked_tokens : il est refusé par tous les workers, y compris après un redémarrage.
+    - Supprime toujours les cookies, même si le token est déjà expiré ou révoqué
+      (sinon le navigateur garderait un cookie inutilisable).
     - Retourne un message JSON de confirmation.
     """
-    revoke_token(get_jwt())
-    return jsonify({"msg": "Déconnecté avec succès"}), 200
+    try:
+        verify_jwt_in_request()
+        revoke_token(get_jwt())
+    except (JWTExtendedException, PyJWTError):
+        pass  # token absent, expiré ou déjà révoqué : rien à révoquer
+
+    response = jsonify({"msg": "Déconnecté avec succès"})
+    unset_jwt_cookies(response)
+    return response, 200

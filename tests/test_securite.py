@@ -32,7 +32,9 @@ from extensions import db  # noqa: E402
 
 app = app_module.app
 assert app.config['SQLALCHEMY_DATABASE_URI'] == TEST_DB_URL, 'Refus : la base de test n est pas la base temporaire'
-c = app.test_client()
+# use_cookies=False : chaque requête s'authentifie uniquement par l'en-tête Authorization
+# du compte voulu (sinon le cookie de la dernière connexion serait envoyé à sa place)
+c = app.test_client(use_cookies=False)
 results = []
 
 # Risques connus et assumés : affichés, mais ne font pas échouer le script
@@ -52,10 +54,22 @@ def check(name, vulnerable, detail=""):
     print(f"{label:<8} {name}{suffix}")
 
 
+def set_cookies(response):
+    """Cookies posés par une réponse : {nom: (valeur, attributs en minuscules)}."""
+    cookies = {}
+    for header in response.headers.getlist('Set-Cookie'):
+        name_value, *attrs = [part.strip() for part in header.split(';')]
+        name, _, value = name_value.partition('=')
+        cookies[name] = (value, [a.lower() for a in attrs])
+    return cookies
+
+
 def register_login(email, password="secret123"):
+    """Connexion ; le token (posé en cookie HttpOnly) est renvoyé dans l'en-tête Authorization."""
     c.post('/api/auth/register', json={'email': email, 'password': password})
-    r = c.post('/api/auth/login', json={'email': email, 'password': password}).get_json()
-    return {'Authorization': f"Bearer {r['token']}"}, r['userId']
+    r = c.post('/api/auth/login', json={'email': email, 'password': password})
+    token = set_cookies(r)['access_token_cookie'][0]
+    return {'Authorization': f"Bearer {token}"}, r.get_json()['userId']
 
 
 today = datetime.date.today()
@@ -173,6 +187,33 @@ with app.app_context():
     from models import Echeances, Entreprise
     orphelins = Echeances.query.filter_by(user_id=did).count() + Entreprise.query.filter_by(user_id=did).count()
 check("Données orphelines après suppression du compte", orphelins > 0, f"{orphelins} ligne(s)")
+
+print("\n=== Cookie de session ===")
+navigateur = app.test_client()  # garde les cookies, comme un navigateur
+navigateur.post('/api/auth/register', json={'email': 'cookie@test.io', 'password': 'secret123'})
+r = navigateur.post('/api/auth/login', json={'email': 'cookie@test.io', 'password': 'secret123'})
+cookies = set_cookies(r)
+check("Token lisible par JavaScript dans la réponse de connexion", 'token' in (r.get_json() or {}), str(sorted(r.get_json())))
+attrs = cookies.get('access_token_cookie', ('', []))[1]
+check("Cookie du token sans HttpOnly", 'httponly' not in attrs, '; '.join(attrs))
+check("Cookie du token sans SameSite=Strict", 'samesite=strict' not in attrs)
+check("Cookie du token envoyé à tout le site (Path différent de /api/)", 'path=/api/' not in attrs)
+check("Cookie du token conservé plus longtemps que le token (1 h)", 'max-age=3600' not in attrs)
+csrf = cookies.get('csrf_access_token', ('', []))[0]
+check("Session par cookie inopérante (lecture refusée)", navigateur.get('/api/users/profile').status_code != 200)
+r = navigateur.post('/api/echeances/', json={'title': 'CSRF', 'due_date': str(today), 'statut': 'A venir'})
+check("Requête modifiante acceptée sans en-tête CSRF (attaque CSRF)", r.status_code < 400, str(r.status_code))
+r = navigateur.post('/api/echeances/', json={'title': 'CSRF', 'due_date': str(today), 'statut': 'A venir'},
+                    headers={'X-CSRF-TOKEN': 'faux'})
+check("Requête modifiante acceptée avec un faux jeton CSRF", r.status_code < 400, str(r.status_code))
+r = navigateur.post('/api/auth/logout', headers={'X-CSRF-TOKEN': csrf})
+check("Cookies non effacés à la déconnexion", set_cookies(r).get('access_token_cookie', ('x',))[0] != '')
+check("Session encore valide après déconnexion", navigateur.get('/api/users/profile').status_code == 200)
+p = subprocess.run([sys.executable, '-c', 'import config; print(config.Config.JWT_COOKIE_SECURE)'],
+                   env=dict(os.environ, FLASK_ENV='production', SECRET_KEY='x' * 32, JWT_SECRET_KEY='x' * 32,
+                            DATABASE_URL='sqlite://'),
+                   capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+check("Cookie sans Secure (HTTPS) en production", p.stdout.strip().splitlines()[-1:] != ['True'], p.stdout.strip())
 
 print("\n=== CORS ===")
 r = c.options('/api/users/profile', headers={'Origin': 'https://evil.example', 'Access-Control-Request-Method': 'GET'})

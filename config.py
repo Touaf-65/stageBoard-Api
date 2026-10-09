@@ -63,9 +63,24 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'
 
     # ── JWT durci ─────────────────────────────────────────────
-    JWT_COOKIE_SECURE = True
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
+
+    # ── JWT dans un cookie HttpOnly ───────────────────────────
+    # Le navigateur envoie le token sans que JavaScript puisse le lire : une faille XSS
+    # ne permet plus de le voler (il était auparavant dans le localStorage).
+    # "headers" reste accepté pour les scripts et les tests (Authorization: Bearer).
+    JWT_TOKEN_LOCATION = ["cookies", "headers"]
+    JWT_ACCESS_COOKIE_PATH = "/api/"         # envoyé uniquement aux appels de l'API
+    JWT_COOKIE_SAMESITE = "Strict"           # jamais envoyé depuis un autre site
+    JWT_COOKIE_SECURE = IS_PRODUCTION        # HTTPS en production ; http://localhost en développement
+    JWT_SESSION_COOKIE = False               # cookie persistant, durée alignée sur le token (voir auth.login)
+    # Protection CSRF par double soumission, en plus de SameSite : le cookie
+    # csrf_access_token (lisible par le front) doit être renvoyé dans l'en-tête X-CSRF-TOKEN
+    # pour toute requête qui modifie des données (POST, PUT, DELETE…)
+    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_ACCESS_CSRF_COOKIE_PATH = "/"        # lisible depuis toutes les pages du front
+    JWT_ACCESS_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
 
 
 class Frontend_Config:
